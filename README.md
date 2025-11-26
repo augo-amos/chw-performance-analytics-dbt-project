@@ -36,7 +36,6 @@ tests/                # Data quality tests
 1. **Setup Environment**:
    ```bash
    cp .env.template .env
-   # Edit .env with your Snowflake credentials
    ```
 
 2. **Setup Snowflake**:
@@ -123,14 +122,13 @@ The main model uses incremental materialization with `delete+insert` strategy to
 mkdir -p capstone/{models/{staging,metrics},macros,tests,data}
 cd capstone
 
-# 2. Create all files (copy the content above into respective files)
+# 2. Create all files 
 
 # 3. Make setup script executable
 chmod +x setup_environment.sh
 
 # 4. Setup environment
 cp .env.template .env
-# Edit .env with your actual Snowflake credentials
 
 # 5. Run complete setup
 ./setup_environment.sh
