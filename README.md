@@ -38,10 +38,6 @@ RAW.CHW_DATA.FCT_CHV_ACTIVITY
 ### Step 1: Project Setup
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/chw-performance-analytics.git
-cd chw-performance-analytics
-
 # Create virtual environment
 python -m venv venv
 source venv/bin/activate  
