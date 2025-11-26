@@ -1,135 +1,362 @@
 # Community Health Worker Performance Analytics
 
-Monthly aggregation of Community Health Worker (CHW) activities for dashboard performance metrics.
+A comprehensive dbt data pipeline for aggregating and analyzing Community Health Worker (CHW) activities to support dashboard performance metrics and operational reporting.
 
 ## Project Overview
 
-This dbt project processes CHW activity data from the RAW database and materializes models in CAP_DB using the CAP_WH warehouse.
+This dbt project processes raw CHW activity data from the RAW database and transforms it into monthly aggregated metrics in CAP_DB using Snowflake. The solution includes custom data quality tests, incremental processing, and comprehensive documentation.
 
-## Key Features
+## Project Architecture
 
-- **Month Assignment Rule**: Activities on/after the 26th are assigned to NEXT month
-- **Data Quality Checks**: Filters out NULL dates, deleted records, and invalid CHW IDs
-- **Incremental Processing**: Efficiently handles new data with delete+insert strategy
-- **Cross-Database Processing**: Sources from RAW, materializes in CAP_DB
-- **Custom Data Tests**: Comprehensive data quality validation including freshness, date boundaries, and negative values
-
-## Project Structure
-
+### Data Flow
 ```
-models/
-├── staging/           # Data cleaning and standardization (views in CAP_DB)
-├── metrics/           # Business metrics and aggregations (tables in CAP_DB)
-macros/               # Reusable SQL logic
-tests/                # Data quality tests
+RAW.CHW_DATA.FCT_CHV_ACTIVITY 
+    → CAP_DB.CAP_SCHEMA.STG_CHW_ACTIVITY (view)
+    → CAP_DB.CAP_SCHEMA.CHW_ACTIVITY_MONTHLY (incremental table)
 ```
 
-## Database Architecture
+### Key Components
+- **Staging Layer**: Data cleaning and standardization (views)
+- **Metrics Layer**: Business metrics and aggregations (tables)
+- **Data Quality**: Custom tests for freshness, boundaries, and validity
+- **Documentation**: Comprehensive data lineage and business logic
 
-- **Source**: `RAW.CHW_DATA.FCT_CHV_ACTIVITY`
-- **Staging**: `CAP_DB.ANALYTICS.STG_CHW_ACTIVITY` (view)
-- **Metrics**: `CAP_DB.ANALYTICS.CHW_ACTIVITY_MONTHLY` (incremental table)
-- **Warehouse**: `CAP_WH`
+## Complete Setup Guide
 
-## Quick Start
+### Prerequisites
 
-1. **Setup Environment**:
+1. **Snowflake Account** with access to:
+   - RAW database (source data)
+   - CAP_DB (target database)
+   - CAP_WH warehouse
+
+2. **Local Development Environment**:
+   - Python 3.8+
+   - dbt Core installed
+   - Git for version control
+
+### Step 1: Project Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/chw-performance-analytics.git
+cd chw-performance-analytics
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  
+
+# Install dependencies
+pip install dbt-snowflake
+```
+
+### Step 2: Environment Configuration
+
+1. **Copy environment template**:
    ```bash
    cp .env.template .env
    ```
 
-2. **Setup Snowflake**:
-   ```bash
-   ./setup_environment.sh
+2. **Set up the .env file**:
+   ```
+   SNOWFLAKE_ACCOUNT=your_account
+   SNOWFLAKE_USER=your_username
+   SNOWFLAKE_PASSWORD=your_password
+   SNOWFLAKE_ROLE=your_role
+   SNOWFLAKE_WAREHOUSE=CAP_WH
+   SNOWFLAKE_DATABASE=CAP_DB
+   SNOWFLAKE_SCHEMA=ANALYTICS
    ```
 
-3. **Run dbt**:
-   ```bash
-   dbt run
-   dbt test
-   dbt docs generate
-   dbt docs serve
+3. **Configure dbt profile** (`~/.dbt/profiles.yml`):
+   ```yaml
+   chw_analytics:
+     target: dev
+     outputs:
+       dev:
+         type: snowflake
+         account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+         user: "{{ env_var('SNOWFLAKE_USER') }}"
+         password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+         role: "{{ env_var('SNOWFLAKE_ROLE') }}"
+         warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE') }}"
+         database: "{{ env_var('SNOWFLAKE_DATABASE') }}"
+         schema: "{{ env_var('SNOWFLAKE_SCHEMA') }}"
+         threads: 4
+         client_session_keep_alive: False
    ```
 
-## Core Models
+### Step 3: Database Setup
 
-### `stg_chw_activity`
-- Cleans and standardizes source data from RAW database
-- Materialized as view in CAP_DB
+1. **Verify source data access**:
+   ```sql
+   SELECT COUNT(*) FROM RAW.CHW_DATA.FCT_CHV_ACTIVITY;
+   ```
 
-### `chw_activity_monthly` 
-- Main metrics table in CAP_DB
-- Applies month assignment logic
-- Incremental table with delete+insert strategy
-- Primary key: `(chv_id, report_month)`
+2. **Ensure target database permissions**:
+   ```sql
+   -- Verify you have CREATE TABLE privileges in CAP_DB
+   USE ROLE YOUR_ROLE;
+   USE WAREHOUSE CAP_WH;
+   USE DATABASE CAP_DB;
+   USE SCHEMA ANALYTICS;
+   ```
 
-## Key Business Logic
+### Step 4: Initial Deployment
 
-### Month Assignment
-```sql
--- Activities on/after 26th → next month
-CASE WHEN DAY(activity_date) >= 26 THEN
-    DATE_TRUNC('MONTH', DATEADD(MONTH, 1, activity_date))
-ELSE
-    DATE_TRUNC('MONTH', activity_date)
-END
+```bash
+# Test connection
+dbt debug
+
+# Run all models
+dbt run
+
+# Execute all tests
+dbt test
+
+# Generate documentation
+dbt docs generate
+
+# Serve documentation locally
+dbt docs serve
 ```
 
-## Metrics Calculated
+## Core Business Logic
 
-- **Total Activities**: Count of all activities
-- **Unique Households Visited**: Distinct households
-- **Unique Patients Served**: Distinct patients
-- **Activity Type Breakdown**: Pregnancy visits, child assessments, family planning, etc.
+### Month Assignment Rule
+Activities are assigned to months based on the following logic:
+```sql
+CASE 
+  WHEN DAY(activity_date) >= 26 THEN
+    DATE_TRUNC('MONTH', DATEADD(MONTH, 1, activity_date))
+  ELSE
+    DATE_TRUNC('MONTH', activity_date)
+END AS report_month
+```
+**Example**: An activity on January 26th is counted in February's metrics.
 
-## Testing
+### Data Quality Filters
+- Exclude records with NULL activity dates
+- Filter out deleted records (`deleted = FALSE`)
+- Remove activities with invalid CHW IDs
+- Exclude test/data quality records
 
-### Data Quality Tests
+## Model Implementation
 
-This project includes comprehensive custom data tests to ensure data reliability:
+### Staging Model (`models/staging/stg_chw_activity.sql`)
+```sql
+{{
+  config(
+    materialized='view',
+    schema='CAP_SCHEMA'
+  )
+}}
+
+SELECT
+  chv_id,
+  activity_date,
+  household_id,
+  patient_id,
+  activity_type,
+  -- ... other fields
+FROM {{ source('raw', 'fct_chv_activity') }}
+WHERE activity_date IS NOT NULL
+  AND deleted = FALSE
+  AND chv_id IS NOT NULL
+```
+
+### Main Metrics Table (`models/metrics/chw_activity_monthly.sql`)
+```sql
+{{
+  config(
+    materialized='incremental',
+    unique_key='(chv_id, report_month)',
+    strategy='delete+insert'
+  )
+}}
+
+WITH monthly_aggregation AS (
+  SELECT
+    chv_id,
+    report_month,
+    COUNT(*) AS total_activities,
+    COUNT(DISTINCT household_id) AS unique_households,
+    COUNT(DISTINCT patient_id) AS unique_patients
+  FROM {{ ref('stg_chw_activity') }}
+  GROUP BY chv_id, report_month
+)
+SELECT * FROM monthly_aggregation
+```
+
+## Testing Strategy
+
+### 1. Built-in dbt Tests
+
+**Schema tests** (`models/schema.yml`):
+```yaml
+version: 2
+
+models:
+  - name: chw_activity_monthly
+    columns:
+      - name: chv_id
+        tests:
+          - not_null
+          - unique
+      - name: report_month
+        tests:
+          - not_null
+      - name: total_activities
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_chw_activity')
+              field: chv_id
+```
+
+### 2. Custom Data Quality Tests
+
+**Data Freshness** (`tests/data_freshness.sql`):
+```sql
+-- Check if source data is current
+{% set CURRENT_DATE='2025-02-10' %}
+
+SELECT 
+    MAX(REPORT_MONTH) as latest_month,
+    DATEDIFF('month', MAX(REPORT_MONTH), CURRENT_DATE) as months_behind
+FROM {{ ref('chw_activity_monthly') }}
+HAVING months_behind < 3
+```
+
+**Date Boundaries** (`tests/date_boundaries.sql`):
+```sql
+-- Validate activity dates are within expected range
+SELECT *
+FROM {{ ref('stg_chw_activity') }}
+WHERE ACTIVITY_DATE < '2024-12-01'  
+   OR ACTIVITY_DATE > CURRENT_DATE  
+   OR ACTIVITY_DATE IS NULL
+```
+
+**Negative Values** (`tests/negative_values.sql`):
+```sql
+-- Ensure no negative values in numeric fields
+SELECT *
+FROM {{ ref('chw_activity_monthly') }}
+WHERE TOTAL_ACTIVITIES < 0
+   OR UNIQUE_HOUSEHOLDS_VISITED < 0
+   OR UNIQUE_PATIENTS_SERVED < 0
+   OR PREGNANCY_VISITS < 0
+   OR CHILD_ASSESSMENTS < 0
+   OR FAMILY_PLANNING_VISITS < 0
+```
+
+### 3. Running Tests
 
 ```bash
 # Run all tests
 dbt test
 
-# Run specific model tests  
+# Run specific test categories
+dbt test --select test_type:singular
+dbt test --select test_type:generic
+
+# Run tests on specific model
 dbt test --select chw_activity_monthly
 
 # Run source data tests
 dbt test --select source:raw
-
-# Run custom data tests
-dbt test --select test_type:singular
 ```
 
-### Custom Test Coverage
+## Key Metrics
 
-- **`data_freshness.sql`**: Validates that source data is current and up-to-date
-- **`date_boundaries.sql`**: Ensures activity dates fall within expected operational ranges
-- **`negative_values.sql`**: Checks for invalid negative values in numeric fields
+### Activity Metrics
+- **Total Activities**: Count of all CHW activities
+- **Unique Households Visited**: Distinct households served
+- **Unique Patients Served**: Distinct patients assisted
+- **Activities per CHW**: Average activities per health worker
+
+### Performance Indicators
+- **Monthly Activity Trends**: Growth/decline patterns
+- **CHW Productivity**: Activities per worker
+- **Household Coverage**: Percentage of target households reached
+- **Patient Engagement**: Frequency of patient interactions
 
 ## Incremental Processing
 
-The main model uses incremental materialization with `delete+insert` strategy to handle:
-- Late-arriving data (previous months)
-- New CHWs
-- Data corrections
+The pipeline uses incremental materialization to efficiently handle:
 
-## Complete Setup Commands:
+- **New Data**: Daily activity records
+- **Late Arrivals**: Historical data corrections
+- **Data Updates**: Modified activity records
+- **New CHWs**: Recently onboarded health workers
 
+### Processing Strategy
 ```bash
-# 1. Create project structure
-mkdir -p capstone/{models/{staging,metrics},macros,tests,data}
-cd capstone
+# Full refresh (when needed)
+dbt run --full-refresh
 
-# 2. Create all files 
+# Incremental run (daily operation)
+dbt run --select chw_activity_monthly+
 
-# 3. Make setup script executable
-chmod +x setup_environment.sh
+# Specific model only
+dbt run --models chw_activity_monthly
+```
 
-# 4. Setup environment
-cp .env.template .env
+## Documentation
 
-# 5. Run complete setup
-./setup_environment.sh
+### Generating Documentation
+```bash
+# Generate static documentation
+dbt docs generate
+
+# Serve documentation locally
+dbt docs serve
+# Access at http://localhost:8080
+```
+
+### Documentation Includes
+- Data lineage and dependencies
+- Model descriptions and SQL code
+- Test definitions and results
+- Source data definitions
+- Business metrics calculations
+
+## Operational Procedures
+
+### Daily Operation
+```bash
+# Standard daily run
+dbt run
+dbt test
+dbt docs generate
+```
+
+### Monitoring and Alerting
+- **Data Freshness**: Monitor source data timeliness
+- **Test Failures**: Alert on data quality issues
+- **Processing Errors**: Monitor dbt run successes
+- **Performance**: Track query execution times
+
+### Troubleshooting Common Issues
+
+**Connection Problems**:
+```bash
+# Test Snowflake connection
+dbt debug
+
+# Verify environment variables
+echo $SNOWFLAKE_ACCOUNT
+```
+
+**Test Failures**:
+```bash
+# Investigate specific test failure
+dbt test --select test_name:data_freshness
+```
+
+**Model Errors**:
+```bash
+# Run specific model with full logs
+dbt run --models stg_chw_activity --debug
 ```
