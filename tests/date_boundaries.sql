@@ -1,0 +1,5 @@
+SELECT *
+FROM {{ ref('stg_chw_activity') }}
+WHERE ACTIVITY_DATE < '2024-12-01'  
+   OR ACTIVITY_DATE > CURRENT_DATE  
+   --OR ACTIVITY_DATE IS NULL

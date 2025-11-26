@@ -1,0 +1,78 @@
+version: 2
+
+models:
+  - name: stg_chw_activity
+    description: "Cleaned and standardized CHW activity data from source system"
+    columns:
+      - name: ACTIVITY_ID
+        description: "Unique identifier for the activity"
+      - name: CHV_ID
+        description: "Identifier for the CHW who performed the activity"
+      - name: ACTIVITY_DATE
+        description: "Date the activity occurred"
+      - name: ACTIVITY_TYPE
+        description: "Type of activity performed"
+
+  - name: chw_activity_monthly
+    description: "Monthly aggregation of CHW activities for dashboard performance metrics. Applies special month assignment rule (26th cutoff) and calculates key performance indicators per CHW per month."
+        
+    columns:
+      - name: CHV_ID
+        description: "Unique identifier for the Community Health Worker"
+
+      - name: REPORT_MONTH
+        description: "First day of the reporting month (YYYY-MM-01). Activities on/after 26th are assigned to next month."
+        tests:
+          - not_null
+          
+      - name: TOTAL_ACTIVITIES
+        description: "Total number of activities performed by this CHW in this reporting month"
+        tests:
+          - not_null
+          - dbt_utils.at_least_one
+          
+      - name: UNIQUE_HOUSEHOLDS_VISITED
+        description: "Number of distinct households visited (counted once even if visited multiple times)"
+        tests:
+          - not_null
+          - dbt_utils.at_least_one
+          
+      - name: UNIQUE_PATIENTS_SERVED
+        description: "Number of distinct patients served (NULL patient_ids are excluded)"
+        tests:
+          - not_null
+          - dbt_utils.at_least_one
+          
+      - name: PREGNANCY_VISITS
+        description: "Count of activities where activity_type = 'pregnancy_visit'"
+        tests:
+          - not_null
+          - dbt_utils.at_least_one
+          
+      - name: CHILD_ASSESSMENTS
+        description: "Count of activities where activity_type = 'child_assessment'"
+        tests:
+          - not_null
+          - dbt_utils.at_least_one
+          
+      - name: FAMILY_PLANNING_VISITS
+        description: "Count of activities where activity_type = 'family_planning'"
+        tests:
+          - not_null
+          - dbt_utils.at_least_one
+          
+      - name: _LOADED_AT
+        description: "Timestamp when this record was loaded by dbt"
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - CHV_ID
+            - REPORT_MONTH
+          
+      - dbt_utils.fewer_rows_than:
+          compare_model: ref('stg_chw_activity')
+          # Should have fewer rows than source (aggregated)
+          
+      - dbt_utils.expression_is_true:
+          expression: "total_activities >= pregnancy_visits + child_assessments + family_planning_visits"

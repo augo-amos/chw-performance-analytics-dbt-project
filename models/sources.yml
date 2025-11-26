@@ -1,0 +1,70 @@
+version: 2
+
+sources:
+  - name: raw
+    description: "Raw source tables in RAW database"
+    database: "{{ env_var('SNOWFLAKE_DATABASE') }}"
+    schema: "RAW"  
+    meta:
+      owner: "analytics-team"
+    
+    tables:
+      - name: fct_chv_activity
+        description: "Fact table containing CHW activity records - one row per CHW activity/visit"
+        loaded_at_field: CREATED_AT
+        identifier: "FCT_CHV_ACTIVITY"
+        
+        meta:
+          business_owner: "field-operations"
+          grain: "one_row_per_activity"
+          
+        columns:
+          - name: ACTIVITY_ID
+            description: "Unique identifier for the activity"
+            tests:
+              - not_null
+              - unique
+              
+          - name: CHV_ID
+            description: "Identifier for the CHW who performed the activity"
+            tests:
+              - not_null
+              
+          - name: ACTIVITY_DATE
+            description: "Date the activity occurred"
+            tests:
+              - not_null
+              
+          - name: ACTIVITY_TIMESTAMP
+            description: "Full timestamp of activity (if available)"
+            
+          - name: ACTIVITY_TYPE
+            description: "Type of activity performed"
+            tests:
+              - not_null
+              - accepted_values:
+                  values: ['pregnancy_visit', 'child_assessment', 'family_planning', 'household_registration', 'postnatal_visit', 'nutrition_assessment', 'referral_followup', 'other']
+                  
+          - name: HOUSEHOLD_ID
+            description: "Household that was visited"
+            
+          - name: PATIENT_ID
+            description: "Individual patient/client served (if applicable)"
+            
+          - name: LOCATION_ID
+            description: "Geographic location (village/area)"
+            
+          - name: IS_DELETED
+            description: "Soft delete flag (TRUE = record is deleted)"
+            tests:
+              - not_null
+              
+          - name: CREATED_AT
+            description: "When this record was created in the warehouse"
+            tests:
+              - not_null
+              
+          - name: UPDATED_AT
+            description: "When this record was last updated"
+            tests:
+              - not_null
