@@ -1,4 +1,5 @@
 # Community Health Worker Performance Analytics
+<img width="1536" height="1024" alt="dbt_snowflake_chw" src="https://github.com/user-attachments/assets/db3f41e3-ad15-4477-b325-e86382bfcc8f" />
 
 A comprehensive dbt data pipeline for aggregating and analyzing Community Health Worker (CHW) activities to support dashboard performance metrics and operational reporting.
 
